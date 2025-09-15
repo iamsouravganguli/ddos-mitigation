@@ -28,7 +28,8 @@ def rotate_log():
         print(f"[!] Error rotating log file: {e}")
 
 try:
-    b = BPF(src_file="xdp_ddos.c")
+    # Add cflags to suppress the harmless macro redefinition warnings
+    b = BPF(src_file="xdp_ddos.c", cflags=["-Wno-macro-redefined"])
     fn = b.load_func("xdp_ddos_prog", BPF.XDP)
 except Exception as e:
     print(f"Failed to compile or load BPF program: {e}")
