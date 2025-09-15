@@ -2,6 +2,7 @@ import os
 import time
 import socket
 import struct
+import asyncio
 from datetime import datetime
 from bcc import BPF
 from dotenv import load_dotenv
@@ -32,23 +33,37 @@ else:
     print("[!] Warning: Telegram credentials not found in .env file. Alerts will be disabled.")
 
 def send_telegram_alert(ip_addr, packet_count):
-    """Sends a formatted alert message to the configured Telegram chat."""
+    """Sends a formatted alert message asynchronously to the configured Telegram chat."""
     if not bot:
         return
+
+    # Define an async function to send the message
+    async def send_async():
+        try:
+            # Before sending, start a chat with your bot in Telegram!
+            message = (
+                f"🚨 **DDoS Attack Mitigated** 🚨\n\n"
+                f"Blocked IP Address: `{ip_addr}`\n"
+                f"Reason: Exceeded packet threshold\n"
+                f"Packet Count at Block: `{packet_count}`\n"
+                f"Timestamp: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`"
+            )
+            # Await the coroutine to actually send the message
+            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode='Markdown')
+            print(f"[*] Telegram alert sent for IP: {ip_addr}")
+        except Exception as e:
+            print(f"[!] Failed to send Telegram alert: {e}")
+            print("[!] Have you started a conversation with your bot yet? Send it /start.")
+
+    # Run the async function from our synchronous context
     try:
-        # Before sending, start a chat with your bot in Telegram!
-        message = (
-            f"🚨 **DDoS Attack Mitigated** 🚨\n\n"
-            f"Blocked IP Address: `{ip_addr}`\n"
-            f"Reason: Exceeded packet threshold\n"
-            f"Packet Count at Block: `{packet_count}`\n"
-            f"Timestamp: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`"
-        )
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode='Markdown')
-        print(f"[*] Telegram alert sent for IP: {ip_addr}")
-    except Exception as e:
-        print(f"[!] Failed to send Telegram alert: {e}")
-        print("[!] Have you started a conversation with your bot yet? Send it /start.")
+        asyncio.run(send_async())
+    except RuntimeError:
+        # This can happen in some environments, handle it by creating a new loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(send_async())
+
 
 def rotate_log():
     """Archives the current log file if it exists."""
