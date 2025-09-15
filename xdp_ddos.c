@@ -3,17 +3,12 @@
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <linux/in.h>
-#include <linux/types.h> 
+#include <linux/types.h>
 
 #define PACKET_THRESHOLD 2000
 
-struct flow_key {
-    __u32 saddr;
-};
-
-struct flow_metrics {
-    __u64 packet_count;
-};
+struct flow_key { __u32 saddr; };
+struct flow_metrics { __u64 packet_count; };
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -27,22 +22,18 @@ struct {
     __uint(max_entries, 256 * 1024);
 } events SEC(".maps");
 
-struct event {
-    __u32 saddr;
-    __u64 packet_count;
-};
+struct event { __u32 saddr; __u64 packet_count; };
 
 SEC("xdp_ddos")
 int xdp_ddos_prog(struct xdp_md *ctx) {
     void *data = (void *)(long)ctx->data;
     void *data_end = (void *)(long)ctx->data_end;
-
     struct ethhdr *eth = data;
-    if ((void *)eth + sizeof(*eth) > data_end) return XDP_PASS;
+    if ((void*)eth + sizeof(*eth) > data_end) return XDP_PASS;
     if (eth->h_proto != bpf_htons(ETH_P_IP)) return XDP_PASS;
 
     struct iphdr *ip = data + sizeof(*eth);
-    if ((void *)ip + sizeof(*ip) > data_end) return XDP_PASS;
+    if ((void*)ip + sizeof(*ip) > data_end) return XDP_PASS;
 
     struct flow_key key = { .saddr = ip->saddr };
     struct flow_metrics *metrics = bpf_map_lookup_elem(&flow_map, &key);
@@ -62,7 +53,6 @@ int xdp_ddos_prog(struct xdp_md *ctx) {
             return XDP_DROP;
         }
     }
-
     return XDP_PASS;
 }
 
