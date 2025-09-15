@@ -1,3 +1,4 @@
+// xdp_ddos.c - Fixed for Ubuntu 22.04+
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
 #include <linux/if_ether.h>
@@ -54,7 +55,11 @@ int xdp_ddos_prog(struct xdp_md *ctx) {
         __sync_fetch_and_add(&metrics->packet_count, 1);
         if (metrics->packet_count > PACKET_THRESHOLD) {
             struct event *e = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
-            if (e) { e->saddr = ip->saddr; e->packet_count = metrics->packet_count; bpf_ringbuf_submit(e, 0); }
+            if (e) {
+                e->saddr = ip->saddr;
+                e->packet_count = metrics->packet_count;
+                bpf_ringbuf_submit(e, 0);
+            }
             return XDP_DROP;
         }
     }
