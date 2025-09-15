@@ -1,101 +1,174 @@
-# XDP/eBPF DDoS Mitigation Tool
-
-This project is a simple but effective DDoS mitigation tool using XDP (eXpress Data Path) and eBPF. It is designed to run in the Linux kernel for high-performance packet processing, capable of detecting and blocking IP addresses that send an excessive number of packets.
-
-## Features
-
--   **High-Performance:** Uses XDP to process packets directly in the network driver, dropping malicious traffic before it hits the kernel's network stack.
--   **Dynamic Blocking:** Automatically identifies and blocks high-volume source IPs based on a configurable packet threshold.
--   **Userspace Monitoring:** A Python controller loads the XDP program and listens for real-time events (e.g., an IP being blocked) via a BPF ring buffer.
--   **Logging:** Records all blocking events to a log file with automatic daily rotation.
--   **Safe by Default:** The default configuration is set to run on the `localhost` interface for safe testing and demonstration.
+Of course. Here is a professional, comprehensive `README.md` file in Markdown format, ready for your GitHub repository.
 
 ---
 
-## ⚠️ Important: Responsible Use
+# XDP/eBPF DDoS Mitigation & Analysis Suite
 
-This tool is for educational and defensive purposes on networks and servers that you own or have explicit permission to test. **Do not use this tool to attack systems you do not own.** The default settings are configured for safe, local testing to prevent accidental misuse.
+![Platform](https://img.shields.io/badge/Platform-Linux%20(Ubuntu%2022.04%2B)-blue)
+![Language](https://img.shields.io/badge/Language-C%20%26%20Python-orange)
+![Technology](https://img.shields.io/badge/Technology-XDP%2FeBPF-red)
+![License](https://img.shields.io/badge/License-GPLv3-brightgreen)
+
+A high-performance, intelligent DDoS mitigation tool built with XDP and eBPF. It filters traffic at the kernel level for maximum efficiency, provides real-time attack analysis, and sends instant alerts to Telegram. Includes a powerful interactive CLI for live system control.
+
+## 🚀 Features
+
+*   **⚡ Kernel-Speed Filtering:** Drops malicious packets using XDP before they hit the network stack, preserving system resources.
+*   **🤖 Adaptive Attack Detection:** Dynamically identifies and blocks suspicious IPs based on packet volume and protocol analysis.
+*   **📱 Instant Telegram Alerts:** Receives real-time notifications on your mobile device when an attack is detected and mitigated.
+*   **🎮 Interactive Command-Line Control:** Manage firewall rules, view statistics, and configure settings on-the-fly without restarting.
+*   **📊 Traffic Analysis & Logging:** Monitors and logs all blocked events for later analysis and forensics.
+*   **🔒 Secure Configuration:** Uses environment variables to protect sensitive API keys and credentials.
+
+## 🛠️ How It Works
+
+The system employs a multi-layered defense strategy directly in the Linux kernel, orchestrated by a userspace controller.
+
+```mermaid
+graph TD
+    A[Packet Received on NIC] --> B{XDP Program Loaded?};
+    B -- Yes --> C[Whitelist Check];
+    C -- IP Whitelisted --> D[PASS Packet];
+    C -- IP Not Whitelisted --> E[Blocklist Check];
+    E -- IP Manually Blocked --> F[DROP Packet];
+    E -- IP Not Blocked --> G[Track Packet Rate];
+    G -- Rate < Threshold --> D;
+    G -- Rate >= Threshold --> H[Add to Auto-Blocklist];
+    H --> I[Send Event to Userspace];
+    I --> J[Controller.py];
+    J --> K[Log to Syslog & File];
+    J --> L[Send Telegram Alert];
+    J --> M{Interactive CLI};
+    M --> N[Add/Remove IPs];
+    M --> O[View Statistics];
+    M --> P[Exit & Cleanup];
+```
+
+## 📦 Installation
+
+### Prerequisites
+*   **Ubuntu 22.04 LTS** or newer (other distributions may require adjustments)
+*   A Linux kernel **5.4** or higher (recommended: **5.15+** for best eBPF feature support)
+*   `clang`, `llvm`, `libbpf`, and kernel headers
+*   Python 3.8+
+
+### 1. Clone the Repository
+```bash
+git clone https://github.com/your-username/xdp-ddos-mitigation.git
+cd xdp-ddos-mitigation
+```
+
+### 2. Install Dependencies
+Run the setup script to install all required system and Python dependencies:
+```bash
+chmod +x scripts/setup.sh
+sudo ./scripts/setup.sh
+```
+
+### 3. Configure Telegram Alerts (Optional)
+1.  Create a bot with [BotFather](https://t.me/BotFather) on Telegram and get your API token.
+2.  Message [@userinfobot](https://t.me/userinfobot) to get your Chat ID.
+3.  Copy the environment template and add your credentials:
+    ```bash
+    cp .env.example .env
+    nano .env  # Edit with your token and chat ID
+    ```
+
+## 🚀 Usage
+
+### Starting the Defense System
+Attach the XDP program to your network interface and start the controller. Replace `eth0` with your public-facing interface.
+```bash
+sudo python3 controller.py -i eth0
+# or use make
+sudo make run IFACE=eth0
+```
+
+### Using the Interactive CLI
+Once started, you will see the `ddos-ctl>` prompt. Use the following commands for real-time control:
+
+```bash
+# Whitelist Management
+wl add 192.168.1.100     # Add an IP to the permanent whitelist
+wl remove 192.168.1.100  # Remove an IP from the whitelist
+wl list                  # Show all whitelisted IPs
+
+# Blocklist Management
+bl add 10.0.0.5          # Manually block an IP address
+bl remove 10.0.0.5       # Unblock a manual blocked IP
+bl list                  # Show all manually blocked IPs
+
+# Statistics & Info
+stats                    # Show current packet statistics
+help                     # Show all available commands
+exit                     # Detach XDP program and exit safely
+```
+
+### Simulating an Attack (For Testing)
+Use the provided script to test the system. **Only run this on a machine you own!**
+```bash
+# Edit the TARGET_IP in scripts/simulate_attack.sh first!
+chmod +x scripts/simulate_attack.sh
+sudo ./scripts/simulate_attack.sh
+```
+
+## ⚙️ Configuration
+
+Key configuration parameters can be modified in the source files:
+
+| Parameter | File | Description | Default Value |
+| :--- | :--- | :--- | :--- |
+| `PACKET_THRESHOLD` | `xdp_ddos.c` | Min packets/sec to trigger a block | `2000` |
+| `BLOCK_TIMEOUT` | `xdp_ddos.c` | How long to block an IP (ms) | `300000` (5 mins) |
+| `IFACE` | `controller.py` | Default network interface | `eth0` |
+
+## 📁 Project Structure
+
+```
+.
+├── controller.py           # Main userspace controller & CLI
+├── xdp_ddos.c             # XDP/eBPF program (kernel code)
+├── Makefile               # Build and management commands
+├── .env.example           # Template for environment variables
+├── requirements.txt       # Python dependencies
+├── scripts/
+│   ├── setup.sh          # Automated dependency installer
+│   ├── simulate_attack.sh # Test script (use responsibly)
+│   └── helpers.py        # Utility functions
+└── logs/
+    └── ddos_log.txt      # Auto-generated attack log
+```
+
+## 🗺️ Roadmap
+
+-   [ ] **Advanced Detection:** Implement ML-based anomaly detection
+-   [ ] **Web Dashboard:** Add a web UI for remote monitoring
+-   [ ] **BGP Integration:** Automatically announce blocked prefixes
+-   [ ] **Docker Support:** Containerize for easy deployment
+-   [ ] **Extended Protocols:** Add specific filters for DNS/NTP amplification attacks
+
+## ⚠️ Disclaimer
+
+**This tool is intended for educational purposes and authorized security testing only.** The authors are not responsible for any misuse or damage caused by this program. Always ensure you have explicit permission to test or protect the network you are using this tool on.
+
+## 📜 License
+
+This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/your-username/xdp-ddos-mitigation/issues).
+
+1.  Fork the project
+2.  Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4.  Push to the branch (`git push origin feature/AmazingFeature`)
+5.  Open a Pull Request
+
+## 📞 Support
+
+If you have any questions or run into problems, please open an issue on GitHub.
 
 ---
 
-## Installation (Ubuntu 22.04)
-
-1.  **Clone the repository:**
-    ```bash
-    git clone <your-repo-url>
-    cd <repo-name>
-    ```
-
-2.  **Install system dependencies:**
-    This will install the eBPF compiler toolchain, kernel headers, Python's BCC library, and the `hping3` traffic generator.
-    ```bash
-    sudo apt update
-    sudo apt install -y clang llvm libbpf-dev linux-headers-$(uname -r) python3-bcc hping3 make
-    ```
-    
-3. **Install Python dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
----
-
-## How to Use
-
-### Quickstart: Safe Local Testing
-
-This is the recommended way to see the tool in action without affecting any public network traffic.
-
-1.  **Start the Controller:**
-    Open a terminal. The `make run` command will start the Python controller, which loads and attaches the XDP program to your local loopback (`lo`) interface.
-    ```bash
-    sudo make run
-    ```
-    You will see a message that it is watching for events.
-
-2.  **Start the Test Attack:**
-    Open a **second terminal**. The `make attack` command runs a script that floods `127.0.0.1` with UDP packets.
-    ```bash
-    sudo make attack
-    ```
-
-3.  **Observe the Result:**
-    In the first terminal, you will immediately see output showing that `127.0.0.1` has been blocked. Events will also be saved in `logs/events.log`.
-
-4.  **Stop the Attack and Controller:**
-    -   In the second terminal, press `Ctrl+C` to stop the attack.
-    -   In the first terminal, press `Ctrl+C` to stop the controller and detach the XDP program.
-
-### Advanced: Two-Server Testing
-
-To test this in a realistic environment (like the one with your two cloud servers), you need to change the configuration.
-
-**On the Target Server (e.g., `65.109.132.110`):**
-
-1.  Find your public network interface name (e.g., `eth0`) using `ip a`.
-2.  Edit `controller.py` and change the `IFACE` variable:
-    ```python
-    # controller.py
-    IFACE = "eth0"  # Change from "lo" to your public interface
-    ```
-3.  Run the controller: `sudo make run`.
-
-**On the Attacker Server (e.g., `65.108.57.206`):**
-
-1.  Edit `scripts/start_attack.sh` and change the `TARGET` variable:
-    ```bash
-    # scripts/start_attack.sh
-    TARGET="65.109.132.110" # Change from "127.0.0.1" to your target's IP
-    ```
-2.  Run the attack: `sudo ./scripts/start_attack.sh`.
-
----
-
-## How It Works
-
-1.  **`xdp_ddos.c` (Kernel Space):** This eBPF program is attached to a network interface. For each incoming IPv4 packet, it increments a counter for the source IP in a BPF hash map. If the count exceeds `PACKET_THRESHOLD`, it drops the packet and sends an event to userspace.
-2.  **`controller.py` (User Space):** This script uses the BCC library to compile and load the eBPF program. It attaches it to the specified network interface and listens on a BPF ring buffer for events from the kernel, which it then logs.
-
-## License
-
-This project is licensed under the GPL. See the `LICENSE` string in `xdp_ddos.c`.
+**Happy (and Safe) Hacking!** 🔒

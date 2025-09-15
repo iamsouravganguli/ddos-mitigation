@@ -1,5 +1,9 @@
+
 # The main dependency, bpfcc, is installed via the system package manager (apt)
 # as 'python3-bpfcc'. This file is included for standard Python project structure.
 
+# Used to load environment variables from a .env file (e.g., API keys, tokens)
 python-dotenv
+
+# Python wrapper for the Telegram Bot API, used for sending alerts.
 python-telegram-bot
