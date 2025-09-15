@@ -1,10 +1,9 @@
-// xdp_ddos.c - Fixed for Ubuntu 22.04+
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <linux/in.h>
-#include <linux/types.h>
+#include <linux/types.h> 
 
 #define PACKET_THRESHOLD 2000
 
