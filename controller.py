@@ -1,56 +1,63 @@
-import os
-import time
-import socket
-import struct
-from datetime import datetime
-from bcc import BPF
+// File: xdp_ddos.c
+#include <linux/bpf.h>
+#include <bpf/bpf_helpers.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
 
-# --- Configuration ---
-IFACE = "eno1"                # Target server interface
-ATTACKER_IP = "65.108.57.206" # Pre-set attacker IP
-LOG_DIR = "logs"
-LOG_FILE = os.path.join(LOG_DIR, "events.log")
-ARCHIVE_DIR = os.path.join(LOG_DIR, "archive")
+#define PACKET_THRESHOLD 2000  // Threshold for CPX11 server
 
-os.makedirs(ARCHIVE_DIR, exist_ok=True)
+struct flow_key {
+    __u32 saddr;
+};
 
-# Rotate log daily
-def rotate_log():
-    if os.path.exists(LOG_FILE):
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        archived_file = os.path.join(ARCHIVE_DIR, f"events_{timestamp}.log")
-        os.rename(LOG_FILE, archived_file)
+struct flow_metrics {
+    __u64 packet_count;
+};
 
-# --- Initialize BPF ---
-print(f"[*] Attaching XDP program to interface {IFACE}...")
-b = BPF(src_file="xdp_ddos.c")
-fn = b.load_func("xdp_ddos_prog", BPF.XDP)
-b.attach_xdp(IFACE, fn, 0)
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 100000);
+    __type(key, struct flow_key);
+    __type(value, struct flow_metrics);
+} flow_map SEC(".maps");
 
-def print_event(cpu, data, size):
-    event = b["events"].event(data)
-    ip_addr = socket.inet_ntoa(struct.pack("I", event.saddr))
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"{timestamp} - {ip_addr} - {event.packet_count} packets\n"
-    print(log_entry.strip())
-    
-    if ip_addr == ATTACKER_IP:
-        with open(LOG_FILE, "a") as f:
-            f.write(log_entry)
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 256 * 1024);
+} events SEC(".maps");
 
-b["events"].open_ring_buffer(print_event)
+struct event {
+    __u32 saddr;
+    __u64 packet_count;
+};
 
-last_rotation = time.time()
+SEC("xdp_ddos")
+int xdp_ddos_prog(struct xdp_md *ctx) {
+    void *data = (void *)(long)ctx->data;
+    void *data_end = (void *)(long)ctx->data_end;
 
-try:
-    while True:
-        b.ring_buffer_poll()
-        time.sleep(0.5)
-        if time.time() - last_rotation > 24*60*60:
-            rotate_log()
-            last_rotation = time.time()
-except KeyboardInterrupt:
-    print("\n[*] Detaching XDP program...")
-finally:
-    b.remove_xdp(IFACE, 0)
-    print("[*] Program detached. Exiting.")
+    struct ethhdr *eth = data;
+    if ((void *)eth + sizeof(*eth) > data_end) return XDP_PASS;
+    if (eth->h_proto != bpf_htons(ETH_P_IP)) return XDP_PASS;
+
+    struct iphdr *ip = data + sizeof(*eth);
+    if ((void *)ip + sizeof(*ip) > data_end) return XDP_PASS;
+
+    struct flow_key key = { .saddr = ip->saddr };
+    struct flow_metrics *metrics = bpf_map_lookup_elem(&flow_map, &key);
+
+    if (!metrics) {
+        struct flow_metrics new_metrics = { .packet_count = 1 };
+        bpf_map_update_elem(&flow_map, &key, &new_metrics, BPF_ANY);
+    } else {
+        __sync_fetch_and_add(&metrics->packet_count, 1);
+        if (metrics->packet_count > PACKET_THRESHOLD) {
+            struct event *e = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
+            if (e) { e->saddr = ip->saddr; e->packet_count = metrics->packet_count; bpf_ringbuf_submit(e, 0); }
+            return XDP_DROP;
+        }
+    }
+    return XDP_PASS;
+}
+
+char LICENSE[] SEC("license") = "GPL";

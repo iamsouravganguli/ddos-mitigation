@@ -4,7 +4,7 @@
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 
-#define PACKET_THRESHOLD 2000  // Tunable for CPX11
+#define PACKET_THRESHOLD 2000  // Threshold for CPX11 server
 
 struct flow_key {
     __u32 saddr;
