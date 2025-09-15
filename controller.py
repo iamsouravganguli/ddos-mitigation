@@ -4,16 +4,49 @@ import socket
 import struct
 from datetime import datetime
 from bcc import BPF
+from dotenv import load_dotenv
+import telegram
+
+# --- Load Environment Variables ---
+load_dotenv()
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # --- Configuration ---
-# Configured for your public-facing interface.
 IFACE = "eth0"
-
 LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "events.log")
 ARCHIVE_DIR = os.path.join(LOG_DIR, "archive")
 
 os.makedirs(ARCHIVE_DIR, exist_ok=True)
+
+# --- Telegram Bot Initialization ---
+bot = None
+if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+    try:
+        bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
+        print("[*] Telegram bot initialized successfully.")
+    except Exception as e:
+        print(f"[!] Warning: Could not initialize Telegram bot. Alerts will be disabled. Error: {e}")
+else:
+    print("[!] Warning: Telegram credentials not found in .env file. Alerts will be disabled.")
+
+def send_telegram_alert(ip_addr, packet_count):
+    """Sends a formatted alert message to the configured Telegram chat."""
+    if not bot:
+        return
+    try:
+        message = (
+            f"🚨 **DDoS Attack Mitigated** 🚨\n\n"
+            f"Blocked IP Address: `{ip_addr}`\n"
+            f"Reason: Exceeded packet threshold\n"
+            f"Packet Count: `{packet_count}`\n"
+            f"Timestamp: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`"
+        )
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode='Markdown')
+        print(f"[*] Telegram alert sent for IP: {ip_addr}")
+    except Exception as e:
+        print(f"[!] Failed to send Telegram alert: {e}")
 
 def rotate_log():
     """Archives the current log file if it exists."""
@@ -40,7 +73,6 @@ try:
     b.attach_xdp(IFACE, fn, 0)
 except Exception as e:
     print(f"[!] Failed to attach XDP program: {e}")
-    print("[!] Check if the interface exists and you are running with sudo privileges.")
     exit(1)
 
 def print_event(cpu, data, size):
@@ -51,6 +83,9 @@ def print_event(cpu, data, size):
 
     log_entry = f"{timestamp} - BLOCKED - IP: {ip_addr}, Packets: {event.packet_count}\n"
     print(log_entry.strip())
+
+    # Send a Telegram alert
+    send_telegram_alert(ip_addr, event.packet_count)
 
     with open(LOG_FILE, "a") as f:
         f.write(log_entry)
