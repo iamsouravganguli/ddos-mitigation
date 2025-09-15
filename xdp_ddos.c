@@ -1,6 +1,6 @@
-#include <linux/bpf.h>
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_endian.h>
+// Use the BCC-specific proto header for compatibility
+#include <bcc/proto.h>
+
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <linux/in.h>
@@ -10,35 +10,27 @@
 
 // Key for the flow map: source IP address
 struct flow_key {
-    __u32 saddr;
+    u32 saddr;
 };
 
 // Value for the flow map: packet count
 struct flow_metrics {
-    __u64 packet_count;
+    u64 packet_count;
 };
 
 // BPF hash map to store packet counts for each source IP
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 100000);
-    __type(key, struct flow_key);
-    __type(value, struct flow_metrics);
-} flow_map SEC(".maps");
+BPF_HASH(flow_map, struct flow_key, struct flow_metrics, 100000);
 
 // BPF ring buffer to send events to userspace
-struct {
-    __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 256 * 1024); // 256 KB
-} events SEC(".maps");
+BPF_RINGBUF_OUTPUT(events, 8); // 8 pages = 32KB
 
 // Data structure for the event sent to userspace
 struct event {
-    __u32 saddr;
-    __u64 packet_count;
+    u32 saddr;
+    u64 packet_count;
 };
 
-SEC("xdp_ddos")
+
 int xdp_ddos_prog(struct xdp_md *ctx) {
     void *data = (void *)(long)ctx->data;
     void *data_end = (void *)(long)ctx->data_end;
@@ -58,27 +50,29 @@ int xdp_ddos_prog(struct xdp_md *ctx) {
     }
 
     struct flow_key key = { .saddr = ip->saddr };
-    struct flow_metrics *metrics = bpf_map_lookup_elem(&flow_map, &key);
+    struct flow_metrics *metrics = flow_map.lookup(&key);
 
     if (!metrics) {
+        // First time we see this IP, add it to the map with a count of 1
         struct flow_metrics new_metrics = { .packet_count = 1 };
-        bpf_map_update_elem(&flow_map, &key, &new_metrics, BPF_ANY);
+        flow_map.update(&key, &new_metrics);
     } else {
-        __u64 *count = &metrics->packet_count;
-        (void)bpf_atomic_add(count, 1);
+        // IP exists, atomically increment its packet count
+        lock_xadd(&metrics->packet_count, 1);
 
-        if (*count > PACKET_THRESHOLD) {
-            struct event *e = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
+        if (metrics->packet_count > PACKET_THRESHOLD) {
+            // Threshold exceeded, send an alert to userspace
+            struct event *e = events.ringbuf_reserve(sizeof(struct event));
             if (e) {
                 e->saddr = ip->saddr;
-                e->packet_count = *count;
-                bpf_ringbuf_submit(e, 0);
+                e->packet_count = metrics->packet_count;
+                events.ringbuf_submit(e, 0);
             }
+            // Drop the packet
             return XDP_DROP;
         }
     }
 
+    // Packet is allowed
     return XDP_PASS;
 }
-
-char LICENSE[] SEC("license") = "GPL";
