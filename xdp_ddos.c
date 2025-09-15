@@ -1,6 +1,3 @@
-
-#### `xdp_ddos.c` (Final Version with Spam Fix)
-```c
 // Use the BCC-specific proto header for compatibility with python3-bpfcc
 #include <bcc/proto.h>
 
