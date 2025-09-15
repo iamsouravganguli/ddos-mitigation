@@ -1,174 +1,218 @@
-Of course. Here is a professional, comprehensive `README.md` file in Markdown format, ready for your GitHub repository.
+# XDP DDoS Mitigation System
 
----
+A high-performance, real-time DDoS mitigation solution using eXpress Data Path (XDP) and BPF for Linux. This system provides automatic detection and blocking of suspicious traffic patterns while offering manual control over IP whitelisting and blocklisting.
 
-# XDP/eBPF DDoS Mitigation & Analysis Suite
+## 🌟 Features
 
-![Platform](https://img.shields.io/badge/Platform-Linux%20(Ubuntu%2022.04%2B)-blue)
-![Language](https://img.shields.io/badge/Language-C%20%26%20Python-orange)
-![Technology](https://img.shields.io/badge/Technology-XDP%2FeBPF-red)
-![License](https://img.shields.io/badge/License-GPLv3-brightgreen)
+- **Real-time Traffic Analysis**: Processes packets at line speed using XDP hook in the Linux kernel
+- **Automatic Attack Detection**: Identifies potential DDoS attacks based on packet count thresholds
+- **Dynamic Blocklisting**: Automatically blocks malicious IP addresses exceeding configured limits
+- **Manual IP Management**: Whitelist trusted IPs and manually block suspicious ones
+- **Telegram Integration**: Receive real-time alerts about mitigated attacks
+- **Performance-Optimized**: Minimal overhead with efficient BPF hash maps for state tracking
 
-A high-performance, intelligent DDoS mitigation tool built with XDP and eBPF. It filters traffic at the kernel level for maximum efficiency, provides real-time attack analysis, and sends instant alerts to Telegram. Includes a powerful interactive CLI for live system control.
+## 🏗️ Architecture
 
-## 🚀 Features
+The system consists of two main components:
 
-*   **⚡ Kernel-Speed Filtering:** Drops malicious packets using XDP before they hit the network stack, preserving system resources.
-*   **🤖 Adaptive Attack Detection:** Dynamically identifies and blocks suspicious IPs based on packet volume and protocol analysis.
-*   **📱 Instant Telegram Alerts:** Receives real-time notifications on your mobile device when an attack is detected and mitigated.
-*   **🎮 Interactive Command-Line Control:** Manage firewall rules, view statistics, and configure settings on-the-fly without restarting.
-*   **📊 Traffic Analysis & Logging:** Monitors and logs all blocked events for later analysis and forensics.
-*   **🔒 Secure Configuration:** Uses environment variables to protect sensitive API keys and credentials.
+1. **Kernel Component (XDP Program)**: 
+   - Processes every incoming packet at the earliest possible point
+   - Maintains flow state using BPF hash maps
+   - Implements whitelist/blocklist checks
+   - Drops malicious packets before they reach the networking stack
 
-## 🛠️ How It Works
+2. **User Space Controller**:
+   - Manages BPF maps (whitelist/blocklist operations)
+   - Processes events from the kernel
+   - Sends alerts via Telegram
+   - Provides interactive command interface
 
-The system employs a multi-layered defense strategy directly in the Linux kernel, orchestrated by a userspace controller.
+## 📋 Prerequisites
 
-```mermaid
-graph TD
-    A[Packet Received on NIC] --> B{XDP Program Loaded?};
-    B -- Yes --> C[Whitelist Check];
-    C -- IP Whitelisted --> D[PASS Packet];
-    C -- IP Not Whitelisted --> E[Blocklist Check];
-    E -- IP Manually Blocked --> F[DROP Packet];
-    E -- IP Not Blocked --> G[Track Packet Rate];
-    G -- Rate < Threshold --> D;
-    G -- Rate >= Threshold --> H[Add to Auto-Blocklist];
-    H --> I[Send Event to Userspace];
-    I --> J[Controller.py];
-    J --> K[Log to Syslog & File];
-    J --> L[Send Telegram Alert];
-    J --> M{Interactive CLI};
-    M --> N[Add/Remove IPs];
-    M --> O[View Statistics];
-    M --> P[Exit & Cleanup];
-```
+- Linux kernel 4.18+ (XDP support required)
+- Python 3.7+
+- BPF Compiler Collection (BCC)
+- hping3 (for testing)
+- Telegram Bot Token (optional, for alerts)
 
-## 📦 Installation
+## 🚀 Installation
 
-### Prerequisites
-*   **Ubuntu 22.04 LTS** or newer (other distributions may require adjustments)
-*   A Linux kernel **5.4** or higher (recommended: **5.15+** for best eBPF feature support)
-*   `clang`, `llvm`, `libbpf`, and kernel headers
-*   Python 3.8+
-
-### 1. Clone the Repository
+1. Clone the repository:
 ```bash
 git clone https://github.com/your-username/xdp-ddos-mitigation.git
 cd xdp-ddos-mitigation
 ```
 
-### 2. Install Dependencies
-Run the setup script to install all required system and Python dependencies:
+2. Install Python dependencies:
 ```bash
-chmod +x scripts/setup.sh
-sudo ./scripts/setup.sh
+pip install -r requirements.txt
 ```
 
-### 3. Configure Telegram Alerts (Optional)
-1.  Create a bot with [BotFather](https://t.me/BotFather) on Telegram and get your API token.
-2.  Message [@userinfobot](https://t.me/userinfobot) to get your Chat ID.
-3.  Copy the environment template and add your credentials:
-    ```bash
-    cp .env.example .env
-    nano .env  # Edit with your token and chat ID
-    ```
-
-## 🚀 Usage
-
-### Starting the Defense System
-Attach the XDP program to your network interface and start the controller. Replace `eth0` with your public-facing interface.
+3. Set up Telegram alerts (optional):
+   - Create a new bot using [BotFather](https://t.me/BotFather)
+   - Get your Chat ID
+   - Copy `.env.example` to `.env` and add your credentials:
 ```bash
-sudo python3 controller.py -i eth0
-# or use make
-sudo make run IFACE=eth0
+cp .env.example .env
+# Edit .env with your TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
 ```
 
-### Using the Interactive CLI
-Once started, you will see the `ddos-ctl>` prompt. Use the following commands for real-time control:
+## 🛠️ Usage
+
+### Starting the System
 
 ```bash
-# Whitelist Management
-wl add 192.168.1.100     # Add an IP to the permanent whitelist
-wl remove 192.168.1.100  # Remove an IP from the whitelist
-wl list                  # Show all whitelisted IPs
-
-# Blocklist Management
-bl add 10.0.0.5          # Manually block an IP address
-bl remove 10.0.0.5       # Unblock a manual blocked IP
-bl list                  # Show all manually blocked IPs
-
-# Statistics & Info
-stats                    # Show current packet statistics
-help                     # Show all available commands
-exit                     # Detach XDP program and exit safely
+# Run the controller (requires sudo)
+sudo make run
 ```
 
-### Simulating an Attack (For Testing)
-Use the provided script to test the system. **Only run this on a machine you own!**
+### Interactive Commands
+
+Once the controller is running, use these commands:
+
+```
+wl add <ip>         - Add an IP to the whitelist (e.g., wl add 8.8.8.8)
+wl remove <ip>      - Remove an IP from the whitelist
+wl list             - Show all IPs in the whitelist
+bl add <ip>         - Manually block an IP
+bl remove <ip>      - Manually unblock an IP
+bl list             - Show all manually blocked IPs
+help                - Show help message
+exit                - Detach program and quit
+```
+
+### Testing the System
+
 ```bash
-# Edit the TARGET_IP in scripts/simulate_attack.sh first!
-chmod +x scripts/simulate_attack.sh
-sudo ./scripts/simulate_attack.sh
+# Start a test UDP flood attack (in a separate terminal)
+make attack
+
+# Stop the test attack
+make stop-attack
 ```
 
 ## ⚙️ Configuration
 
-Key configuration parameters can be modified in the source files:
+### Packet Threshold
 
-| Parameter | File | Description | Default Value |
-| :--- | :--- | :--- | :--- |
-| `PACKET_THRESHOLD` | `xdp_ddos.c` | Min packets/sec to trigger a block | `2000` |
-| `BLOCK_TIMEOUT` | `xdp_ddos.c` | How long to block an IP (ms) | `300000` (5 mins) |
-| `IFACE` | `controller.py` | Default network interface | `eth0` |
+Modify the `PACKET_THRESHOLD` value in `xdp_ddos.c` to adjust sensitivity:
+
+```c
+#define PACKET_THRESHOLD 2000  // Adjust based on your traffic patterns
+```
+
+### Network Interface
+
+Change the target interface in `controller.py`:
+
+```python
+IFACE = "eth0"  # Change to your network interface
+```
+
+### Map Sizes
+
+Adjust BPF map capacities in `xdp_ddos.c` based on expected traffic:
+
+```c
+BPF_HASH(whitelist, struct flow_key, u32, 1024);  // Whitelist capacity
+BPF_HASH(manual_blocklist, struct flow_key, u32, 10240);  // Blocklist capacity
+BPF_HASH(flow_map, struct flow_key, struct flow_metrics, 100000);  // Flow tracking
+```
+
+## 📊 How It Works
+
+1. **Packet Processing**: Each packet is inspected at the XDP hook point
+2. **Whitelist Check**: Whitelisted IPs bypass all further checks
+3. **Blocklist Check**: Manually blocked IPs are immediately dropped
+4. **Flow Tracking**: Packet counts per source IP are maintained
+5. **Threshold Detection**: IPs exceeding the packet threshold are automatically blocked
+6. **Alerting**: Block events are logged and Telegram alerts are sent
+7. **State Management**: The controller provides management interface
+
+## 🧪 Testing
+
+The included test scripts simulate a UDP flood attack using hping3:
+
+```bash
+# Start attack simulation
+sudo ./scripts/start_attack.sh
+
+# Monitor blocking in the controller
+# Stop attack simulation
+sudo ./scripts/stop_attack.sh
+```
 
 ## 📁 Project Structure
 
 ```
-.
-├── controller.py           # Main userspace controller & CLI
-├── xdp_ddos.c             # XDP/eBPF program (kernel code)
-├── Makefile               # Build and management commands
-├── .env.example           # Template for environment variables
-├── requirements.txt       # Python dependencies
+xdp-ddos-mitigation/
+├── xdp_ddos.c          # Main XDP/BPF program
+├── controller.py       # User space controller
+├── Makefile           # Build and management commands
+├── requirements.txt   # Python dependencies
+├── .env.example       # Environment variables template
 ├── scripts/
-│   ├── setup.sh          # Automated dependency installer
-│   ├── simulate_attack.sh # Test script (use responsibly)
-│   └── helpers.py        # Utility functions
-└── logs/
-    └── ddos_log.txt      # Auto-generated attack log
+│   ├── start_attack.sh # Attack simulation script
+│   └── stop_attack.sh  # Attack termination script
+└── logs/              # Event log directory (auto-created)
 ```
 
-## 🗺️ Roadmap
+## 🔧 Performance Considerations
 
--   [ ] **Advanced Detection:** Implement ML-based anomaly detection
--   [ ] **Web Dashboard:** Add a web UI for remote monitoring
--   [ ] **BGP Integration:** Automatically announce blocked prefixes
--   [ ] **Docker Support:** Containerize for easy deployment
--   [ ] **Extended Protocols:** Add specific filters for DNS/NTP amplification attacks
+- The system adds minimal overhead as packets are processed before kernel networking stack
+- BPF hash maps are optimized for high-performance lookups/updates
+- For 10Gb+ networks, consider CPU pinning and optimizing map sizes
+- Monitor system performance when under heavy attack
 
-## ⚠️ Disclaimer
+## ⚠️ Limitations
 
-**This tool is intended for educational purposes and authorized security testing only.** The authors are not responsible for any misuse or damage caused by this program. Always ensure you have explicit permission to test or protect the network you are using this tool on.
+- Primarily effective against volumetric attacks
+- Does not inspect packet contents, only headers
+- State is lost on system reboot (persistence can be added)
+- IPv6 support would require additional implementation
 
-## 📜 License
+## 🆘 Troubleshooting
 
-This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
+**XDP program fails to load:**
+- Verify kernel version supports XDP
+- Check interface name is correct
+
+**No events appearing:**
+- Confirm network traffic is reaching the interface
+- Check threshold value isn't too high
+
+**Telegram alerts not working:**
+- Verify .env file contains correct credentials
+- Check internet connectivity
+
+## 📝 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/your-username/xdp-ddos-mitigation/issues).
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-1.  Fork the project
-2.  Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4.  Push to the branch (`git push origin feature/AmazingFeature`)
-5.  Open a Pull Request
+1. Fork the project
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-## 📞 Support
+## 📚 Resources
 
-If you have any questions or run into problems, please open an issue on GitHub.
+- [eBPF and XDP Reference Guide](https://cilium.io/learn/)
+- [BCC Documentation](https://github.com/iovisor/bcc)
+- [XDP Tutorials](https://github.com/xdp-project/xdp-tutorial)
+
+## 🏛️ Academic Reference
+
+This implementation demonstrates practical application of:
+- In-kernel networking with XDP
+- BPF for high-performance packet processing
+- Real-time DDoS mitigation techniques
+- Userspace-kernel communication mechanisms
 
 ---
 
-**Happy (and Safe) Hacking!** 🔒
+**Disclaimer**: This tool is intended for educational and research purposes. Ensure you have proper authorization before testing on any network.
