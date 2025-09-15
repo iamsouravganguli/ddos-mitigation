@@ -1,38 +1,75 @@
-import sys
+import os
 import time
 import socket
 import struct
+from datetime import datetime
 from bcc import BPF
 
-# Configuration
-IFACE = "eth0"  # inside Docker, usually eth0
-if len(sys.argv) > 1:
-    IFACE = sys.argv[1]
+# --- Configuration ---
+# Default to the loopback interface 'lo' for safe testing.
+# For production/real-world testing, change this to your public-facing
+# interface (e.g., "eth0", "eno1").
+IFACE = "lo"
 
-print(f"Attaching XDP program to interface {IFACE}...")
+LOG_DIR = "logs"
+LOG_FILE = os.path.join(LOG_DIR, "events.log")
+ARCHIVE_DIR = os.path.join(LOG_DIR, "archive")
+
+# Create directories if they don't exist
+os.makedirs(ARCHIVE_DIR, exist_ok=True)
+
+def rotate_log():
+    """Archives the current log file if it exists."""
+    if not os.path.exists(LOG_FILE):
+        return
+    try:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        archived_file = os.path.join(ARCHIVE_DIR, f"events_{timestamp}.log")
+        os.rename(LOG_FILE, archived_file)
+        print(f"[*] Log file archived to {archived_file}")
+    except OSError as e:
+        print(f"[!] Error rotating log file: {e}")
+
+# --- Main Program ---
+b = BPF(src_file="xdp_ddos.c")
+fn = b.load_func("xdp_ddos_prog", BPF.XDP)
 
 try:
-    b = BPF(src_file="xdp_ddos.c")
-    fn = b.load_func("xdp_ddos_prog", BPF.XDP)
+    print(f"[*] Attaching XDP program to interface {IFACE}...")
     b.attach_xdp(IFACE, fn, 0)
 except Exception as e:
-    print(f"Error attaching XDP program: {e}")
-    sys.exit(1)
+    print(f"[!] Failed to attach XDP program: {e}")
+    print("[!] Check if the interface exists and you are running with sudo privileges.")
+    exit(1)
 
 def print_event(cpu, data, size):
+    """Callback function to process events from the BPF ring buffer."""
     event = b["events"].event(data)
-    source_ip = socket.inet_ntoa(struct.pack("I", event.saddr))
-    print(f"[*] DDoS Attack DETECTED from {source_ip} ({event.packet_count} packets)")
+    ip_addr = socket.inet_ntoa(struct.pack("I", event.saddr))
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    log_entry = f"{timestamp} - BLOCKED - IP: {ip_addr}, Packets: {event.packet_count}\n"
+    print(log_entry.strip())
+
+    with open(LOG_FILE, "a") as f:
+        f.write(log_entry)
 
 b["events"].open_ring_buffer(print_event)
-print("XDP program attached. Press Ctrl+C to stop.")
+
+print(f"[*] Watching for events on {IFACE}... Press Ctrl+C to exit.")
+
+last_rotation_time = time.time()
+SECONDS_IN_A_DAY = 24 * 60 * 60
 
 try:
     while True:
         b.ring_buffer_poll()
         time.sleep(0.5)
+        if time.time() - last_rotation_time > SECONDS_IN_A_DAY:
+            rotate_log()
+            last_rotation_time = time.time()
 except KeyboardInterrupt:
-    print("\nDetaching XDP program...")
+    print("\n[*] Detaching XDP program...")
 finally:
     b.remove_xdp(IFACE, 0)
-    print("Program detached.")
+    print("[*] Program detached. Exiting.")

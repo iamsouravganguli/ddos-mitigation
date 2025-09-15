@@ -1,5 +1,30 @@
-all:
-	clang -O2 -target bpf -Wall -D__TARGET_ARCH_x86 -I/usr/include -I/usr/include/linux -c xdp_ddos.c -o xdp_ddos.o
+# Makefile for the XDP DDoS Mitigation Tool
+
+.PHONY: all help run attack stop-attack clean
+
+# Default target
+all: help
+
+help:
+	@echo "Available commands:"
+	@echo "  make run          - Start the Python controller (needs sudo)"
+	@echo "  make attack       - Start the test UDP flood attack on localhost (needs sudo)"
+	@echo "  make stop-attack  - Stop the test attack (needs sudo)"
+	@echo "  make clean        - Remove all log files"
+
+run:
+	@echo "[*] Starting the XDP controller..."
+	sudo python3 controller.py
+
+attack:
+	@echo "[*] Starting UDP flood test on localhost..."
+	sudo ./scripts/start_attack.sh
+
+stop-attack:
+	@echo "[*] Stopping UDP flood test..."
+	sudo ./scripts/stop_attack.sh
 
 clean:
-	rm -f xdp_ddos.o
+	@echo "[*] Cleaning up log files..."
+	@rm -rf logs/
+	@echo "[*] Done."

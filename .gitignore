@@ -1,0 +1,6 @@
+# Python
+__pycache__/
+*.pyc
+
+# Logs - Do not commit log files
+logs/
