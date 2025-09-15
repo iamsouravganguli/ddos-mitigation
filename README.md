@@ -85,10 +85,10 @@ exit                - Detach program and quit
 
 ```bash
 # Start a test UDP flood attack (in a separate terminal)
-make attack
+sudo run attack
 
 # Stop the test attack
-make stop-attack
+sudo stop-attack
 ```
 
 ## ⚙️ Configuration
