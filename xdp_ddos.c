@@ -3,8 +3,10 @@
 #include <bpf/bpf_helpers.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
+#include <linux/in.h>
+#include <linux/types.h>
 
-#define PACKET_THRESHOLD 2000  // Threshold for CPX11 server
+#define PACKET_THRESHOLD 2000
 
 struct flow_key {
     __u32 saddr;
@@ -57,6 +59,7 @@ int xdp_ddos_prog(struct xdp_md *ctx) {
             return XDP_DROP;
         }
     }
+
     return XDP_PASS;
 }
 
