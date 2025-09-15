@@ -1,5 +1,3 @@
-# Makefile for the XDP DDoS Mitigation Tool
-
 .PHONY: all help run attack stop-attack clean
 
 all: help

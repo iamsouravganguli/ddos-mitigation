@@ -36,17 +36,19 @@ def send_telegram_alert(ip_addr, packet_count):
     if not bot:
         return
     try:
+        # Before sending, start a chat with your bot in Telegram!
         message = (
             f"🚨 **DDoS Attack Mitigated** 🚨\n\n"
             f"Blocked IP Address: `{ip_addr}`\n"
             f"Reason: Exceeded packet threshold\n"
-            f"Packet Count: `{packet_count}`\n"
+            f"Packet Count at Block: `{packet_count}`\n"
             f"Timestamp: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`"
         )
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode='Markdown')
         print(f"[*] Telegram alert sent for IP: {ip_addr}")
     except Exception as e:
         print(f"[!] Failed to send Telegram alert: {e}")
+        print("[!] Have you started a conversation with your bot yet? Send it /start.")
 
 def rotate_log():
     """Archives the current log file if it exists."""
@@ -84,7 +86,6 @@ def print_event(cpu, data, size):
     log_entry = f"{timestamp} - BLOCKED - IP: {ip_addr}, Packets: {event.packet_count}\n"
     print(log_entry.strip())
 
-    # Send a Telegram alert
     send_telegram_alert(ip_addr, event.packet_count)
 
     with open(LOG_FILE, "a") as f:

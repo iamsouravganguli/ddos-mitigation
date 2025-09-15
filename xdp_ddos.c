@@ -1,3 +1,6 @@
+
+#### `xdp_ddos.c` (Final Version with Spam Fix)
+```c
 // Use the BCC-specific proto header for compatibility with python3-bpfcc
 #include <bcc/proto.h>
 
@@ -8,7 +11,7 @@
 
 #define PACKET_THRESHOLD 2000
 
-// Key for the flow map: source IP address
+// Key for the maps: source IP address
 struct flow_key {
     u32 saddr;
 };
@@ -20,6 +23,9 @@ struct flow_metrics {
 
 // BPF hash map to store packet counts for each source IP
 BPF_HASH(flow_map, struct flow_key, struct flow_metrics, 100000);
+
+// BPF hash map to track IPs that have already been reported to userspace
+BPF_HASH(reported_ips, struct flow_key, u32, 100000);
 
 // BPF ring buffer to send events to userspace
 BPF_RINGBUF_OUTPUT(events, 8); // 8 pages = 32KB
@@ -59,12 +65,23 @@ int xdp_ddos_prog(struct xdp_md *ctx) {
         lock_xadd(&metrics->packet_count, 1);
 
         if (metrics->packet_count > PACKET_THRESHOLD) {
-            struct event *e = events.ringbuf_reserve(sizeof(struct event));
-            if (e) {
-                e->saddr = ip->saddr;
-                e->packet_count = metrics->packet_count;
-                events.ringbuf_submit(e, 0);
+            // Check if we have already reported this IP.
+            u32 *already_reported = reported_ips.lookup(&key);
+            if (!already_reported) {
+                // If not reported, send the alert.
+                struct event *e = events.ringbuf_reserve(sizeof(struct event));
+                if (e) {
+                    e->saddr = ip->saddr;
+                    e->packet_count = metrics->packet_count;
+                    events.ringbuf_submit(e, 0);
+                }
+                
+                // Mark this IP as reported so we don't send more alerts.
+                u32 reported_flag = 1;
+                reported_ips.update(&key, &reported_flag);
             }
+            
+            // Always drop the packet if over threshold.
             return XDP_DROP;
         }
     }

@@ -1,2 +1,5 @@
 # The main dependency, bpfcc, is installed via the system package manager (apt)
 # as 'python3-bpfcc'. This file is included for standard Python project structure.
+
+python-dotenv
+python-telegram-bot
