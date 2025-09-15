@@ -6,16 +6,13 @@ from datetime import datetime
 from bcc import BPF
 
 # --- Configuration ---
-# Default to the loopback interface 'lo' for safe testing.
-# For production/real-world testing, change this to your public-facing
-# interface (e.g., "eth0", "eno1").
-IFACE = "lo"
+# Configured for your public-facing interface.
+IFACE = "eth0"
 
 LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "events.log")
 ARCHIVE_DIR = os.path.join(LOG_DIR, "archive")
 
-# Create directories if they don't exist
 os.makedirs(ARCHIVE_DIR, exist_ok=True)
 
 def rotate_log():
@@ -30,9 +27,12 @@ def rotate_log():
     except OSError as e:
         print(f"[!] Error rotating log file: {e}")
 
-# --- Main Program ---
-b = BPF(src_file="xdp_ddos.c")
-fn = b.load_func("xdp_ddos_prog", BPF.XDP)
+try:
+    b = BPF(src_file="xdp_ddos.c")
+    fn = b.load_func("xdp_ddos_prog", BPF.XDP)
+except Exception as e:
+    print(f"Failed to compile or load BPF program: {e}")
+    exit(1)
 
 try:
     print(f"[*] Attaching XDP program to interface {IFACE}...")

@@ -1,4 +1,7 @@
-// Use the BCC-specific proto header for compatibility
+
+#### `xdp_ddos.c` (BCC-Compatible Version)
+```c
+// Use the BCC-specific proto header for compatibility with python3-bpfcc
 #include <bcc/proto.h>
 
 #include <linux/if_ether.h>
@@ -53,26 +56,21 @@ int xdp_ddos_prog(struct xdp_md *ctx) {
     struct flow_metrics *metrics = flow_map.lookup(&key);
 
     if (!metrics) {
-        // First time we see this IP, add it to the map with a count of 1
         struct flow_metrics new_metrics = { .packet_count = 1 };
         flow_map.update(&key, &new_metrics);
     } else {
-        // IP exists, atomically increment its packet count
         lock_xadd(&metrics->packet_count, 1);
 
         if (metrics->packet_count > PACKET_THRESHOLD) {
-            // Threshold exceeded, send an alert to userspace
             struct event *e = events.ringbuf_reserve(sizeof(struct event));
             if (e) {
                 e->saddr = ip->saddr;
                 e->packet_count = metrics->packet_count;
                 events.ringbuf_submit(e, 0);
             }
-            // Drop the packet
             return XDP_DROP;
         }
     }
 
-    // Packet is allowed
     return XDP_PASS;
 }
